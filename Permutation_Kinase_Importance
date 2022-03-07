@@ -1,0 +1,73 @@
+
+
+# Importing the libraries
+import keras
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import Dropout
+import numpy as np
+import pandas as pd
+from sklearn.metrics import mean_squared_error
+from statistics import mean
+
+response_data2 = pd.read_csv('IL1B_response.csv') # USE FOR IL1B DATA
+#response_data2 = pd.read_csv('IL6_response.csv') # USE FOR IL6 DATA
+#response_data2 = pd.read_csv('IL8_response.csv') # USE FOR IL8 DATA
+#response_data2 = pd.read_csv('IL10_response.csv') # USE FOR IL10 DATA
+#response_data2 = pd.read_csv('CCL2_response.csv') # USE FOR CCL2 DATA
+#response_data2 = pd.read_csv('TNFalpha_response.csv') # USE FOR TNFalpha DATA
+#response_data2 = pd.read_csv('GMCSF_response.csv') # USE FOR GMCSF DATA
+
+drug_list2 = response_data2.iloc[:, 0].values
+alldrugs2 = pd.read_csv('kir_allDrugs_namesDoses.csv', encoding='latin1')
+
+alldrugs2 = alldrugs2.set_index('compound')
+dataset2 = alldrugs2.loc[drug_list2]
+response2 = response_data2['Response'].values
+dataset2["response"] = response2
+
+# Importing the dataset
+X = dataset2.iloc[:, 0:298].values
+y = dataset2.iloc[:, 298].values
+
+X_df = pd.DataFrame(X, index = dataset2.index.tolist()[0:298], columns = alldrugs2.columns.tolist()[0:298])
+y_df = pd.DataFrame(y)
+
+kinase_list = alldrugs2.columns.tolist()
+
+#Initialize hyperparameters in build_classifier() to optimized hyperparameter values
+def build_classifier():
+    classifier = Sequential()
+    classifier.add(Dense(units = 100, kernel_initializer = 'TruncatedNormal', activation = 'relu', input_dim = 298))
+    classifier.add(Dense(units = 100, kernel_initializer = 'TruncatedNormal', activation = 'relu'))
+    classifier.add(Dense(units = 1, kernel_initializer = 'TruncatedNormal' )) 
+    classifier.compile(loss = 'mean_squared_error', optimizer='adam')
+    return classifier
+
+classifier = build_classifier()   
+classifier.fit(X,y, epochs=80, batch_size=44)
+
+results = []
+
+y_pred_base = classifier.predict(X)
+y_true = y.tolist()
+base_score = mean_squared_error(y_pred_base, y_true)
+for kinase_number in range(len(X[0])):
+    error_increase_list = []
+    X_copy = np.copy(X)
+    for shuffle_number in range (10000):
+        np.random.shuffle(X_copy[:,kinase_number])
+        y_pred_new = classifier.predict(X_copy)
+        new_score = mean_squared_error(y_pred_new, y_true)
+        error_increase = new_score - base_score
+        error_increase_list.append(error_increase)
+    mean_error = mean(error_increase_list)
+    results.append([kinase_list[kinase_number], mean_error])
+    print(kinase_number)
+    
+
+
+results_df = pd.DataFrame(results)          
+results_df.to_csv("kinase_importance.csv", header = ["Kinase", "Importance"])
+
+#Run script several iterations for more accurate importance predictions
